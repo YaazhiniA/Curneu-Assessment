@@ -1,113 +1,83 @@
-#include<Windows.h>
-#include<iostream>
-#include<vector>
-#include<string>
+#include <stdio.h>
+#include <string.h>
 
-using namespace std;
+#include "unzip.h"
 
-std::string GetProgramPath() {
-	using namespace std;
-	string pt(_MAX_PATH + 1, '\0');
-	GetModuleFileName(NULL, (LPSTR)pt.c_str(), _MAX_PATH);
-	return pt;
-}
-std::string& CutToFolder(std::string& path)
+#define dir_delimter '/'
+#define MAX_FILENAME 512
+#define READ_SIZE 8192
+
+int main( int argc, char **argv )
 {
-	char c;
-	int len = path.length();
-	while (len && (c = path[len--] != '\\'));
-	path[len + 1] = '\0';
-	path.resize(len + 1);
-	return path;
-}
+    if ( argc < 2 )
+    {
+        printf( "usage:\n%s {file to unzip}\n", argv[ 0 ] );
+        return -1;
+    }
 
-std::string AddFolder(std::string& path, string& fold, bool add_folder = true)
-{
-	if (add_folder)
-		return std::string(path + '\\' + fold);
-	else
-		return std::string(path + fold);
-}
-std::string AddFolder(std::string& path, int i)
-{
-	return AddFolder(path, std::to_string(i));
-}
+   
+    unzFile *zipfile = unzOpen( argv[ 1 ] );
+    if ( zipfile == NULL )
+    {
+        printf( "%s: not found\n" );
+        return -1;
+    }
 
-std::string CreateFolder(std::string& path)
-{
-	if (CreateDirectory(path.c_str(), NULL) ||
-		ERROR_ALREADY_EXISTS == GetLastError())
-	{
-		return path;
-	}
-	return "\0";
-}
+    
+    unz_global_info global_info;
+    if ( unzGetGlobalInfo( zipfile, &global_info ) != UNZ_OK )
+    {
+        printf( "could not read file global info\n" );
+        unzClose( zipfile );
+        return -1;
+    }
 
-void CreateFolderRange(std::string& path, int count)
-{
-	while (count)
-		CreateFolder(AddFolder(path, count--));
-}
+ 
+    char read_buffer[ READ_SIZE ];
 
+    
+    uLong i;
+    for ( i = 0; i < global_info.number_entry; ++i )
+    {
+        
+        unz_file_info file_info;
+        char filename[ MAX_FILENAME ];
+        if ( unzGetCurrentFileInfo(
+            zipfile,
+            &file_info,
+            filename,
+            MAX_FILENAME,
+            NULL, 0, NULL, 0 ) != UNZ_OK )
+        {
+            printf( "could not read file info\n" );
+            unzClose( zipfile );
+            return -1;
+        }
+        
+   
 
-vector<string>  GetAllFiles(string folder)
-{
-	vector<string> names;
-	string search_path = folder + "/*.zip";
-	WIN32_FIND_DATA fd;
-	HANDLE hFind = ::FindFirstFile(search_path.c_str(), &fd);
-	if (hFind != INVALID_HANDLE_VALUE) {
-		do {
-			
-			if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-				names.push_back(fd.cFileName);
-			}
-		} while (::FindNextFile(hFind, &fd));
-		::FindClose(hFind);
-	}
-	return names;
-}
+            
+            FILE *out = fopen( filename, "wb" );
+            if ( out == NULL )
+            {
+                printf( "could not open destination file\n" );
+                unzCloseCurrentFile( zipfile );
+                unzClose( zipfile );
+                return -1;
+            }
 
+            int error = UNZ_OK;
+           
 
-std::string BrowseFolder(std::string saved_path)
-{
-	TCHAR path[MAX_PATH];
+            fclose( out );
+        }
 
-	const char * path_param = saved_path.c_str();
+        unzCloseCurrentFile( zipfile );
 
-	BROWSEINFO bi = { 0 };
-	bi.lpszTitle = ("Browse for folder...");
+        
+    }
 
-	bi.lpfn = BrowseCallbackProc;
-	bi.lParam = (LPARAM)path_param;
+    unzClose( zipfile );
 
-	LPITEMIDLIST pidl = SHBrowseForFolder(&bi);
-
-
-	return "";
-}
-
-
-int main(int argc, char* argv[]) {
-
-
-	string path;
-	if (argc > 1)
-	{
-		path = argv[1];
-		goto doing;
-	}
-	path = (GetProgramPath());
-
-	int result = MessageBox(NULL, "Use current folder?\n(No) for selecting another one", "question", MB_YESNO);
-
-doing:
-	cout << path << endl;
-	vector<string> files = GetAllFiles(path);
-	for (int i = 0; i < files.size(); i++)
-	{
-		std::string& _folder = AddFolder(path, CutToName(files[i]));
-		std::tring& _file = AddFolder(path, files[i]);
-	}
-
+    return 0;
 }
